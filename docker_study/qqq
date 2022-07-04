@@ -1,0 +1,40 @@
+workflow:
+  kind: bindle
+  name: pipeline-mapper-shell-example
+
+  config:
+    artifacts:
+      s3:
+        endpoint: 192.168.70.202:32709
+        accessKey: mxsche
+        secretKey: mxsche123
+
+  tasks:
+    - name: task_subprocess
+      node: task_subprocess
+      parallelism:
+        mapper:
+          s3:
+            bucket: test
+            key: cnn_slam/config
+
+      pipeline:
+        tasks:
+          - name: sub_task_1
+            node: sub_task_1
+            container:
+                image: 192.168.70.202:32373/registry/nvidia/track_new:v1.8
+                command: [python3]
+                args:
+                  - /data/tianhj/k8s/yolo-deepsort/track.py
+                  - --source=/data/tianhj/cardata/input/data.h265
+                  - --config=config.yaml
+                  - --version=2022_0611
+                mounts:
+                  - source: /mnt/data-s3-fs-cardata
+                    target: /data/tianhj/cardata
+                    Type: bind
+                resources:
+                  gpu:
+                    driver: nvidia
+                    count: 1
