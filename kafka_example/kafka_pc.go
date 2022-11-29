@@ -74,3 +74,31 @@ func process(messages <-chan *message.Message) {
 		msg.Ack()
 	}
 }
+
+func KafkaReciveMessage() {
+	saramaSubscriberConfig := kafka.DefaultSaramaSubscriberConfig()
+	// equivalent of auto.offset.reset: earliest
+	saramaSubscriberConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	subscriber, err := kafka.NewSubscriber(
+		kafka.SubscriberConfig{
+			Brokers:               []string{"192.168.70.202:30092"},
+			Unmarshaler:           kafka.DefaultMarshaler{},
+			OverwriteSaramaConfig: saramaSubscriberConfig,
+			ConsumerGroup:         "test_consumer_group",
+		},
+		watermill.NewStdLogger(false, false),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	messages, err := subscriber.Subscribe(context.Background(), "happy1")
+	if err != nil {
+		panic(err)
+	}
+
+	go process(messages)
+
+	select {}
+}

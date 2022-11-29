@@ -7,6 +7,7 @@ import (
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"log"
@@ -37,6 +38,35 @@ HRrjhJigjJ/sBcPRMT3O9NJQIc+jcA3aNSCM/GzwdHjQSJI6L2AvR/JZXirZJXIy
 SvZRT5oQPEKqf80z/tSKDELVhJaklZ65Bp5R
 -----END CERTIFICATE-----`
 )
+
+func GetNodeResource() {
+	log.SetFlags(log.Llongfile | log.Ltime)
+
+	tlsClientConfig := rest.TLSClientConfig{
+		CAData: []byte(CAPEMString),
+	}
+	config := rest.Config{
+		Host:            "lb.kubesphere.local:6443",
+		BearerToken:     BearerToken,
+		TLSClientConfig: tlsClientConfig,
+		Timeout:         20 * time.Second,
+	}
+	clientSet, err := kubernetes.NewForConfig(&config)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	nodes, err := clientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+
+	if err != nil {
+		fmt.Println("11111", err)
+		return
+	}
+	for _, nds := range nodes.Items {
+		//fmt.Println("-------Labels", nds.Labels)
+		fmt.Println("-------Allocatable", nds.Status.Allocatable.Memory().String())
+	}
+}
 
 func StudyK8s() {
 	log.SetFlags(log.Llongfile | log.Ltime)
@@ -188,7 +218,9 @@ func GetPodInfo() {
 		return
 	}
 
-	podInfo, err := clientSet.CoreV1().Pods("default").Get(context.TODO(), "hello-world-767894b579-l76zq", metav1.GetOptions{})
+	clientSet.CoreV1().Pods("default").Watch(context.Background(), metav1.ListOptions{})
+
+	podInfo, err := clientSet.CoreV1().Pods("default").Get(context.TODO(), "busybox-test-784f8874f7-k9kf6", metav1.GetOptions{})
 	if err != nil {
 		fmt.Println("111111", err)
 	}
@@ -235,4 +267,36 @@ func GetPodLog() {
 	}
 
 	fmt.Println("uuuuuuuuu", string(all))
+}
+
+func GetK8sResource() {
+	log.SetFlags(log.Llongfile | log.Ltime)
+
+	tlsClientConfig := rest.TLSClientConfig{
+		CAData: []byte(CAPEMString),
+	}
+	config := rest.Config{
+		Host:            "lb.kubesphere.local:6443",
+		BearerToken:     BearerToken,
+		TLSClientConfig: tlsClientConfig,
+		Timeout:         20 * time.Second,
+	}
+	clientset, err := kubernetes.NewForConfig(&config)
+
+	if err != nil {
+		fmt.Println("5555", err)
+		return
+	}
+
+	restClient := clientset.RESTClient()
+
+	discoveryClient := discovery.NewDiscoveryClient(restClient)
+
+	resources, err := discoveryClient.ServerPreferredResources()
+
+	if err != nil {
+		fmt.Println("6666", err)
+	}
+
+	fmt.Println("---------------", fmt.Sprintf("%+v", resources))
 }
