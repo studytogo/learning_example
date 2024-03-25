@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"hash/adler32"
 	"io/ioutil"
 	"os"
@@ -103,26 +104,36 @@ func (state *BpmnEngineState) run(instance *ProcessInstanceInfo) error {
 		baseElement   BPMN20.BaseElement
 	}
 
-	queue := make([]queueElement, 0)
+	//queue := make([]queueElement, 0)
+	queue := make(chan queueElement, 1)
 	process := instance.processInfo
+	shut_down := false
 
 	switch instance.state {
 	case process_instance.READY:
 		// use start events to start the instance
 		for _, event := range process.definitions.Process.StartEvents {
-			queue = append(queue, queueElement{
+			//queue = append(queue, queueElement{
+			//	inboundFlowId: "",
+			//	baseElement:   event,
+			//})
+			queue <- queueElement{
 				inboundFlowId: "",
 				baseElement:   event,
-			})
+			}
 		}
 		instance.state = process_instance.ACTIVE
 	case process_instance.ACTIVE:
 		intermediateCatchEvents := state.findIntermediateCatchEventsForContinuation(process, instance)
 		for _, ice := range intermediateCatchEvents {
-			queue = append(queue, queueElement{
+			//queue = append(queue, queueElement{
+			//	inboundFlowId: "",
+			//	baseElement:   ice,
+			//})
+			queue <- queueElement{
 				inboundFlowId: "",
 				baseElement:   ice,
-			})
+			}
 		}
 	case process_instance.COMPLETED:
 		return nil
@@ -130,14 +141,18 @@ func (state *BpmnEngineState) run(instance *ProcessInstanceInfo) error {
 		return errors.New("unknown process instance state.")
 	}
 
-	for len(queue) > 0 {
-		element := queue[0].baseElement
-		inboundFlowId := queue[0].inboundFlowId
-		queue = queue[1:]
-
+	f := func(qe queueElement) error {
+		element := qe.baseElement
+		inboundFlowId := qe.inboundFlowId
 		continueNextElement, err := state.handleElement(process, instance, element)
+		fmt.Println("cccccccccccccccccccccccc", err)
 		if err != nil {
+			shut_down = true
+			close(queue)
 			return err
+		}
+		if element.GetType() == BPMN20.EndEvent {
+			close(queue)
 		}
 
 		if !continueNextElement &&
@@ -145,12 +160,12 @@ func (state *BpmnEngineState) run(instance *ProcessInstanceInfo) error {
 			element.GetType() != BPMN20.ParallelGateway {
 			return fmt.Errorf("Process instance %d is in an invalid state.", instance.instanceKey)
 		}
-
 		if continueNextElement {
 			if inboundFlowId != "" {
 				state.scheduledFlows = remove(state.scheduledFlows, inboundFlowId)
 			}
 			nextFlows := BPMN20.FindSequenceFlows(&process.definitions.Process.SequenceFlows, element.GetOutgoingAssociation())
+			//fmt.Println(fmt.Sprintf("%+v", nextFlows))
 			if element.GetType() == BPMN20.ExclusiveGateway {
 				//nextFlows = exclusivelyFilterByConditionExpression(nextFlows, instance.variableContext)
 				nextFlows, err = state.exclusivelyFilterByName(instance, element, nextFlows)
@@ -158,6 +173,7 @@ func (state *BpmnEngineState) run(instance *ProcessInstanceInfo) error {
 					return err
 				}
 			}
+
 			for _, flow := range nextFlows {
 				// TODO: create test for that
 				//if len(flows) < 1 {
@@ -173,14 +189,87 @@ func (state *BpmnEngineState) run(instance *ProcessInstanceInfo) error {
 						"which this engine does not support (yet).", flow.Id)
 				}
 				targetBaseElement := baseElements[0]
-				queue = append(queue, queueElement{
-					inboundFlowId: flow.Id,
-					baseElement:   targetBaseElement,
-				})
+				//queue = append(queue, queueElement{
+				//	inboundFlowId: flow.Id,
+				//	baseElement:   targetBaseElement,
+				//})
+				go func() {
+					if shut_down {
+						return
+					}
+					queue <- queueElement{
+						inboundFlowId: flow.Id,
+						baseElement:   targetBaseElement,
+					}
+				}()
 			}
 		}
+		return nil
 	}
-	return nil
+
+	var eg errgroup.Group
+
+	for v := range queue {
+		eg.Go(func() error {
+			return f(v)
+		})
+	}
+
+	//for len(queue) > 0 {
+	//	fmt.Println("nnnnnn", len(queue))
+	//	element := queue[0].baseElement
+	//	inboundFlowId := queue[0].inboundFlowId
+	//	queue = queue[1:]
+	//
+	//	fmt.Println("pppppp", element.GetId())
+	//	continueNextElement, err := state.handleElement(process, instance, element)
+	//	fmt.Println("jjjjjjjjjjjjj", continueNextElement)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	if !continueNextElement &&
+	//		element.GetType() != BPMN20.EndEvent &&
+	//		element.GetType() != BPMN20.ParallelGateway {
+	//		return fmt.Errorf("Process instance %d is in an invalid state.", instance.instanceKey)
+	//	}
+	//
+	//	if continueNextElement {
+	//		if inboundFlowId != "" {
+	//			state.scheduledFlows = remove(state.scheduledFlows, inboundFlowId)
+	//		}
+	//		nextFlows := BPMN20.FindSequenceFlows(&process.definitions.Process.SequenceFlows, element.GetOutgoingAssociation())
+	//		fmt.Println(fmt.Sprintf("%+v", nextFlows))
+	//		if element.GetType() == BPMN20.ExclusiveGateway {
+	//			//nextFlows = exclusivelyFilterByConditionExpression(nextFlows, instance.variableContext)
+	//			nextFlows, err = state.exclusivelyFilterByName(instance, element, nextFlows)
+	//			if err != nil {
+	//				return err
+	//			}
+	//		}
+	//		for _, flow := range nextFlows {
+	//			// TODO: create test for that
+	//			//if len(flows) < 1 {
+	//			//	panic(fmt.Sprintf("Can't find 'sequenceFlow' element with ID=%s. "+
+	//			//		"This is likely because your BPMN is invalid.", flows[0]))
+	//			//}
+	//			state.scheduledFlows = append(state.scheduledFlows, flow.Id)
+	//			baseElements := BPMN20.FindBaseElementsById(process.definitions, flow.TargetRef)
+	//			// TODO: create test for that
+	//			if len(baseElements) < 1 {
+	//				return fmt.Errorf("Can't find flow element with ID=%s. "+
+	//					"This is likely because there are elements in the definition, "+
+	//					"which this engine does not support (yet).", flow.Id)
+	//			}
+	//			targetBaseElement := baseElements[0]
+	//			queue = append(queue, queueElement{
+	//				inboundFlowId: flow.Id,
+	//				baseElement:   targetBaseElement,
+	//			})
+	//		}
+	//	}
+	//}
+	return eg.Wait()
 }
 
 func (state *BpmnEngineState) findIntermediateCatchEventsForContinuation(process *ProcessInfo, instance *ProcessInstanceInfo) (ret []*BPMN20.TIntermediateCatchEvent) {
@@ -337,6 +426,7 @@ func (state *BpmnEngineState) handleElement(process *ProcessInfo, instance *Proc
 	case BPMN20.ServiceTask, BPMN20.Task, BPMN20.UserTask, BPMN20.ManualTask, BPMN20.SubProcess:
 		return state.handleServiceTask(element, process, instance)
 	case BPMN20.ParallelGateway:
+		fmt.Println("++++++++++++++++", fmt.Sprintf("%+v", element))
 		return state.handleParallelGateway(element), nil
 	case BPMN20.EndEvent:
 		state.handleEndEvent(instance)
@@ -370,6 +460,7 @@ func (state *BpmnEngineState) handleIntermediateCatchEvent(process *ProcessInfo,
 func (state *BpmnEngineState) handleParallelGateway(element BPMN20.BaseElement) bool {
 	// check incoming flows, if ready, then continue
 	allInboundsAreScheduled := true
+	fmt.Println("lllllllllllllllllll", state.scheduledFlows)
 	for _, inFlowId := range element.GetIncomingAssociation() {
 		allInboundsAreScheduled = contains(state.scheduledFlows, inFlowId) && allInboundsAreScheduled
 	}

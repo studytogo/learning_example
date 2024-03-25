@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,9 @@ func GetNodeResource() {
 	for _, nds := range nodes.Items {
 		//fmt.Println("-------Labels", nds.Labels)
 		fmt.Println("-------Allocatable", nds.Status.Allocatable.Memory().String())
+		fmt.Println("-------Allocatable", nds.Status.Allocatable.Storage().String())
+		fmt.Println("-------------------Allocatable", fmt.Sprintf("%+v", nds.Status.Allocatable))
+		fmt.Println("-------------------Capacity", fmt.Sprintf("%+v", nds.Status.Capacity))
 	}
 }
 
@@ -299,4 +303,45 @@ func GetK8sResource() {
 	}
 
 	fmt.Println("---------------", fmt.Sprintf("%+v", resources))
+}
+
+func NewK8sResource() {
+	// 创建一个Kubernetes客户端
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		fmt.Printf("Failed to create Kubernetes client config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 2. 创建Kubernetes客户端
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// 3. 通过nodeName获取机器的可使用资源
+	nodeName := "devnode37"
+	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		fmt.Printf("Node name: %s\n", node.Name)
+		fmt.Printf("Node CPU: %v\n", node.Status.Allocatable.Cpu().MilliValue())
+		fmt.Printf("Node Memory: %v\n", node.Status.Allocatable.Memory().Value())
+
+		// 获取节点的使用情况
+		nodeUsage, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Printf("Node name: %s\n", node.Name)
+		fmt.Printf("Node CPU usage: %v\n", nodeUsage.Status.Allocatable.Cpu().MilliValue()-node.Status.Allocatable.Cpu().MilliValue())
+		fmt.Printf("Node Memory usage: %v\n", nodeUsage.Status.Allocatable.Memory().Value()-node.Status.Allocatable.Memory().Value())
+		fmt.Println("-----------------------------------------------------------------")
+		time.Sleep(1 * time.Minute)
+	}
 }

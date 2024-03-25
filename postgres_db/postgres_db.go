@@ -1,11 +1,11 @@
 package postgres_db
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	udb "github.com/upper/db/v4"
 	"github.com/upper/db/v4/adapter/postgresql"
-	"k8s.io/apimachinery/pkg/util/json"
 	"strings"
 )
 
@@ -24,6 +24,37 @@ const (
 var enumMap = map[int]string{1: "Pending", 2: "Running", 3: "Successed", 4: "Faile"}
 var enumStatusMap = map[string]int{"Failed": 1, "Terminated": 2, "Suspended": 3, "Unknown": 4, "Pending": 5, "Running": 6, "Successed": 7}
 
+type Test struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+type TestRecord struct {
+	Id    uint64           `db:"id,omitempty"`
+	Tjson postgresql.JSONB `db:"name,omitempty"`
+}
+
+func (r *TestRecord) Store(sess udb.Session) udb.Store {
+	return sess.Collection("test")
+}
+
+func CreateTest() {
+	udb.LC().SetLevel(udb.LogLevelDebug)
+	accessor, err := NewPgAccessor()
+	if err != nil {
+		fmt.Println("11111", err)
+	}
+	t := new(Test)
+	t.Id = "111"
+	t.Name = "zcb3"
+	record := new(TestRecord)
+	record.Id = 1
+	record.Tjson = postgresql.JSONB{Data: *t}
+	err = accessor.Save(record)
+	if err != nil {
+		fmt.Println("2222222", err)
+	}
+}
+
 type TaskJson struct {
 	Id     string `json:"id"`
 	Name   string `json:"name"`
@@ -37,14 +68,7 @@ func PostgresDBStudy() {
 	if err != nil {
 		fmt.Println("11111", err)
 	}
-	//collections, err := accessor.Collections()
-	//if err != nil {
-	//	fmt.Println("22222", err)
-	//}
-	//
-	//for i := range collections {
-	//	fmt.Printf("-> %q\n", collections[i].Name())
-	//}
+
 	m := make(map[string]interface{})
 	m["workflowId"] = "3dd72571-ccf4-45e6-8951-dd015dec482f"
 	results := []*TaskRecord{}
@@ -100,9 +124,9 @@ func PostgresDBStudy() {
 func NewPgAccessor() (udb.Session, error) {
 	settings := postgresql.ConnectionURL{
 		Database: "mxsche",
-		Host:     "192.168.70.202:30433",
+		Host:     "192.168.70.31:30220",
 		User:     "postgres",
-		Password: "KtlV7PpWPc",
+		Password: "123456",
 	}
 
 	sess, err := postgresql.Open(settings)

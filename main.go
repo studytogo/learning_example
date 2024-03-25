@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/Workiva/go-datastructures/queue"
+	"learning_example/bpmn_engine"
 	"learning_example/cmd"
 	"learning_example/kafka_example"
-	"learning_example/nats_study"
 	"os"
 	"time"
 )
@@ -22,16 +22,21 @@ func main() {
 	//docker_study.StudyDocker()
 	//k8s_study.GetNodeResource()
 	//minio_study.StudyMinio()
-	//postgres_db.PostgresDBStudy()
+	//postgres_db.CreateTest()
 	//err_group.StudyErrGroup()
 
 	//semaphore_study.SemaphoreStudy()
-	//goque_study.GoqueStudy()
+	//goque_study.StudyMemoryPriorityQueue()
 	//gocron.StudyGocron()
-	nats_study.NatsStudy()
+	//nats_study.SubMessage()
 	//kafka_example.KafkaReciveMessage()
-	//bpmn_engine.StudyBpmnEngine()
+	bpmn_engine.StudyBpmnEngine()
 	//goque_study.GoqueNormal()
+	//err_group.StudyErrGroup()
+	//aws_study.AwsGet()
+	//kafka_study.SubMessage()
+	//export_excel.GeneralExcel()
+	//retry_study.StudyRetry()
 }
 
 ////go:embed templates
